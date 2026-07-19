@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  MET2026 영수증 경비정산 — v1.3 (2026-07-19)
+  MET2026 영수증 경비정산 — v1.4 (2026-07-19)
   변경 이력:
     v1.0 CLOVA OCR + google.script.run 기반 초기 버전
     v1.1 사역팀명 드롭다운(+직접입력), 구매내역 필드 추가, 전체내역 탭 + 엑셀저장
@@ -8,6 +8,7 @@
          전용 별도 스프레드시트 자동 생성
     v1.3 사진 리사이즈/압축 후 OCR 전송, 상호명/금액 추정 로직 개선
          (관리번호 오인식 방지, 콤마·마침표 구분 인식)
+    v1.4 "[고객용]" 같은 대괄호 태그성 문구를 상호명으로 잘못 고르는 문제 수정
 -->
 <html lang="ko">
 <head>
@@ -85,7 +86,7 @@
 <body>
 
 <h1>MET2026 블레싱 삼척 영수증 정산</h1>
-<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v1.3</span></div>
+<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v1.4</span></div>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnRegister" onclick="switchTab('register')">등록하기</button>
@@ -433,10 +434,11 @@ function guessAmount(lines) {
 // 상호명 추정: 상단 몇 줄 중 "영수증/전표/카드/사업자/테이블/승인" 같은
 // 영수증 안내 문구가 아닌, 한글/영문 비중이 높은 줄
 function guessVendor(lines) {
-  const excludeRe = /(영수증|전표|카드|매출|신용|사업자|대표자|TEL|테이블|판매시간|판매사원|영수번호|승인|품명|단가|수량|공급가|부가세|포장|합계)/i;
+  const excludeRe = /(영수증|전표|카드|매출|신용|사업자|대표자|TEL|테이블|판매시간|판매사원|영수번호|승인|품명|단가|수량|공급가|부가세|포장|합계|고객용|관리용|보관용|공급자용)/i;
+  const bracketTagRe = /^\[[^\]]{1,10}\]$/; // "[고객용]"처럼 대괄호로만 감싼 짧은 태그
   for (let i = 0; i < Math.min(lines.length, 8); i++) {
     const line = lines[i];
-    if (excludeRe.test(line)) continue;
+    if (excludeRe.test(line) || bracketTagRe.test(line.replace(/\s+/g, ''))) continue;
     const letters = (line.match(/[가-힣a-zA-Z]/g) || []).length;
     const digits = (line.match(/[0-9]/g) || []).length;
     if (letters >= 2 && letters > digits && line.length <= 25) return line;
