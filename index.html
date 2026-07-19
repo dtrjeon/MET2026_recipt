@@ -18,6 +18,10 @@
     v2.0 "사진 찍기"와 "갤러리에서 선택" 버튼을 분리 — 카메라뿐 아니라 기존 사진도 선택 가능
     v2.1 v2.0에서 인풋을 2개로 나누며 저장 후 초기화 코드가 예전 id(fileInput)를 참조하던
          버그 수정 ("Cannot set properties of null" 저장 실패 문제)
+    v2.2 "예산항목" 탭 추가 (일자/내역/금액 수기 등록), 통계 탭에 예산 대비 지출 비교 카드 추가,
+         지정된 별도 스프레드시트(1Pmj7LFkhY...)를 고정 사용하도록 변경
+    v2.3 새로 배포된 웹앱 URL로 교체
+    v2.4 등록하기 탭에 "수기로 입력하기" 버튼 추가 — 사진/OCR 없이 바로 상호명/금액/일자 등 입력 가능
 -->
 <html lang="ko">
 <head>
@@ -95,11 +99,12 @@
 <body>
 
 <h1>MET2026 블레싱 삼척 영수증 정산</h1>
-<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v2.1</span></div>
+<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v2.4</span></div>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnRegister" onclick="switchTab('register')">등록하기</button>
   <button class="tab-btn" id="tabBtnAll" onclick="switchTab('all')">전체내역</button>
+  <button class="tab-btn" id="tabBtnBudget" onclick="switchTab('budget')">예산항목</button>
   <button class="tab-btn" id="tabBtnStats" onclick="switchTab('stats')">통계</button>
 </div>
 
@@ -138,6 +143,9 @@
   </button>
   <button class="capture-btn" style="background:#555" onclick="document.getElementById('fileInputGallery').click()">
     🖼️ 갤러리에서 선택
+  </button>
+  <button class="capture-btn" style="background:#8a6d3b" onclick="startManualEntry()">
+    ✍️ 수기로 입력하기
   </button>
 
   <img id="preview" />
@@ -190,11 +198,37 @@
   </div>
 </div>
 
+<div id="panelBudget" style="display:none">
+  <div class="card">
+    <label>일자</label>
+    <input id="budgetDate" type="date">
+    <label>내역</label>
+    <input id="budgetDesc" placeholder="예: 식사비 예산, 유류비 예산">
+    <label>금액 (원)</label>
+    <input id="budgetAmount" type="number" placeholder="예: 500000">
+    <button class="save-btn" style="margin-top:14px" onclick="saveBudgetItem()">등록하기</button>
+    <div class="status" id="budgetStatus"></div>
+  </div>
+  <div class="card">
+    <div class="total-bar">
+      <span>예산 합계</span>
+      <span class="amt" id="totalBudgetAmt">0원</span>
+    </div>
+    <div id="budgetList"></div>
+  </div>
+</div>
+
 <div id="panelStats" style="display:none">
   <div class="card">
     <div class="total-bar">
-      <span>사역팀별 지출현황</span>
+      <span>예산 대비 지출</span>
       <button class="refresh-btn" onclick="loadStats()">새로고침</button>
+    </div>
+    <div id="budgetVsSpend"></div>
+  </div>
+  <div class="card">
+    <div class="total-bar">
+      <span>사역팀별 지출현황</span>
     </div>
     <div class="table-wrap">
       <table class="receipt-table">
@@ -218,8 +252,9 @@
 let currentBase64 = null;
 let currentMime = null;
 let allReceiptsCache = [];
+let budgetCache = [];
 
-var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwY3R7NpbzpPHIA3ZI0jDl5zcDLMfp7zt9PORpgty5AXz9qjzX7kncSMYdJhq6SMsC_/exec';
+var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxZXhDUzqRJ-_sjrR6fP4K-sdCA13kh0IG3G9P1XoKLUxG7WAwGXFk8t38S-rs2EgZH/exec';
 
 function callApi(action, params) {
   return fetch(WEBAPP_URL, {
@@ -244,30 +279,105 @@ function callApi(action, params) {
 }
 
 function switchTab(tab) {
-  const panels = { register: 'panelRegister', all: 'panelAll', stats: 'panelStats' };
-  const btns = { register: 'tabBtnRegister', all: 'tabBtnAll', stats: 'tabBtnStats' };
+  const panels = { register: 'panelRegister', all: 'panelAll', budget: 'panelBudget', stats: 'panelStats' };
+  const btns = { register: 'tabBtnRegister', all: 'tabBtnAll', budget: 'tabBtnBudget', stats: 'tabBtnStats' };
   Object.keys(panels).forEach(function(k) {
     document.getElementById(panels[k]).style.display = (k === tab) ? 'block' : 'none';
     document.getElementById(btns[k]).classList.toggle('active', k === tab);
   });
   if (tab === 'all') loadAllList();
+  if (tab === 'budget') loadBudgetList();
   if (tab === 'stats') loadStats();
+}
+
+function saveBudgetItem() {
+  const date = document.getElementById('budgetDate').value;
+  const desc = document.getElementById('budgetDesc').value.trim();
+  const amount = Number(document.getElementById('budgetAmount').value);
+  const statusEl = document.getElementById('budgetStatus');
+  if (!desc) { statusEl.textContent = '내역을 입력해 주세요.'; return; }
+  if (!amount) { statusEl.textContent = '금액을 입력해 주세요.'; return; }
+
+  statusEl.textContent = '등록 중입니다...';
+  callApi('saveBudget', { date: date, desc: desc, amount: amount })
+    .then(function() {
+      statusEl.textContent = '등록되었습니다!';
+      document.getElementById('budgetDesc').value = '';
+      document.getElementById('budgetAmount').value = '';
+      loadBudgetList();
+    })
+    .catch(function(err) { statusEl.textContent = '등록 실패: ' + err.message; });
+}
+
+function loadBudgetList() {
+  document.getElementById('budgetList').innerHTML = '<div class="status">불러오는 중...</div>';
+  callApi('getBudgetList', {})
+    .then(renderBudgetList)
+    .catch(function(err) {
+      document.getElementById('budgetList').innerHTML = '<div class="status">조회 실패: ' + err.message + '</div>';
+    });
+}
+
+function renderBudgetList(items) {
+  budgetCache = items;
+  const listEl = document.getElementById('budgetList');
+  listEl.innerHTML = '';
+  let total = 0;
+  items.forEach(function(it) {
+    total += Number(it.amount) || 0;
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML =
+      '<div class="info"><div class="vendor">' + (it.desc || '') + '</div>' +
+      '<div class="meta">' + formatDateMD(it.date) + '</div></div>' +
+      '<div class="amt">' + Number(it.amount).toLocaleString() + '원</div>' +
+      '<button class="del" onclick="deleteBudgetItem(\'' + it.rowId + '\')">삭제</button>';
+    listEl.appendChild(div);
+  });
+  document.getElementById('totalBudgetAmt').textContent = total.toLocaleString() + '원';
+}
+
+function deleteBudgetItem(rowId) {
+  if (!confirm('이 예산 항목을 삭제할까요?')) return;
+  callApi('deleteBudget', { rowId: rowId }).then(loadBudgetList).catch(function(err) {
+    alert('삭제 실패: ' + err.message);
+  });
 }
 
 function loadStats() {
   document.getElementById('teamStatsBody').innerHTML = '<tr><td colspan="4">불러오는 중...</td></tr>';
   document.getElementById('personStatsBody').innerHTML = '<tr><td colspan="4">불러오는 중...</td></tr>';
-  callApi('getAllReceipts', {})
-    .then(function(items) {
+  document.getElementById('budgetVsSpend').innerHTML = '<div class="status">불러오는 중...</div>';
+  Promise.all([callApi('getAllReceipts', {}), callApi('getBudgetList', {})])
+    .then(function(results) {
+      const items = results[0], budgets = results[1];
       allReceiptsCache = items;
+      budgetCache = budgets;
+      const totalSpend = items.reduce(function(s, it) { return s + (Number(it.amount) || 0); }, 0);
+      const totalBudget = budgets.reduce(function(s, it) { return s + (Number(it.amount) || 0); }, 0);
+      renderBudgetVsSpend(totalBudget, totalSpend);
       const stats = computeStats(items);
       renderStatsTable('teamStatsBody', stats.byTeam);
       renderStatsTable('personStatsBody', stats.byPerson);
     })
     .catch(function(err) {
+      document.getElementById('budgetVsSpend').innerHTML = '조회 실패: ' + err.message;
       document.getElementById('teamStatsBody').innerHTML = '<tr><td colspan="4">조회 실패: ' + err.message + '</td></tr>';
       document.getElementById('personStatsBody').innerHTML = '';
     });
+}
+
+function renderBudgetVsSpend(budget, spend) {
+  const diff = budget - spend;
+  const color = diff >= 0 ? '#1a9c5b' : '#d33';
+  const label = diff >= 0 ? '예산 잔액' : '예산 초과';
+  document.getElementById('budgetVsSpend').innerHTML =
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px;">' +
+    '<span>총 예산</span><span>' + budget.toLocaleString() + '원</span></div>' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px;">' +
+    '<span>총 지출</span><span>' + spend.toLocaleString() + '원</span></div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;color:' + color + ';border-top:1px solid #eee;padding-top:8px;">' +
+    '<span>' + label + '</span><span>' + Math.abs(diff).toLocaleString() + '원</span></div>';
 }
 
 function computeStats(items) {
@@ -574,6 +684,20 @@ function onOcrResult(result) {
   document.getElementById('usedDate').value = result.date || '';
   document.getElementById('editForm').style.display = 'block';
   setStatus('인식 완료! 내용을 확인하고 저장해 주세요.');
+}
+
+// 사진/OCR 없이 바로 수기 입력 폼을 여는 진입점
+function startManualEntry() {
+  currentBase64 = null;
+  currentMime = null;
+  document.getElementById('preview').style.display = 'none';
+  document.getElementById('vendor').value = '';
+  document.getElementById('amount').value = '';
+  document.getElementById('usedDate').value = '';
+  document.getElementById('purchaseDetail').value = '';
+  document.getElementById('memo').value = '';
+  document.getElementById('editForm').style.display = 'block';
+  setStatus('사진 없이 직접 입력해 주세요.');
 }
 
 function saveReceipt() {
