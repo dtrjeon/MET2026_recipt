@@ -16,6 +16,8 @@
     v1.9 드라이브 이미지 링크(uc?id=)가 <img>에서 깨져 보이던 문제 수정
          — thumbnail 형식(drive.google.com/thumbnail?id=...)으로 자동 변환
     v2.0 "사진 찍기"와 "갤러리에서 선택" 버튼을 분리 — 카메라뿐 아니라 기존 사진도 선택 가능
+    v2.1 v2.0에서 인풋을 2개로 나누며 저장 후 초기화 코드가 예전 id(fileInput)를 참조하던
+         버그 수정 ("Cannot set properties of null" 저장 실패 문제)
 -->
 <html lang="ko">
 <head>
@@ -93,7 +95,7 @@
 <body>
 
 <h1>MET2026 블레싱 삼척 영수증 정산</h1>
-<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v2.0</span></div>
+<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v2.1</span></div>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnRegister" onclick="switchTab('register')">등록하기</button>
@@ -599,7 +601,8 @@ function saveReceipt() {
       setStatus('저장되었습니다!');
       document.getElementById('editForm').style.display = 'none';
       document.getElementById('preview').style.display = 'none';
-      document.getElementById('fileInput').value = '';
+      document.getElementById('fileInputCamera').value = '';
+      document.getElementById('fileInputGallery').value = '';
       currentBase64 = null;
       loadList();
       document.getElementById('saveBtn').disabled = false;
