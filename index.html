@@ -22,6 +22,7 @@
          지정된 별도 스프레드시트(1Pmj7LFkhY...)를 고정 사용하도록 변경
     v2.3 새로 배포된 웹앱 URL로 교체
     v2.4 등록하기 탭에 "수기로 입력하기" 버튼 추가 — 사진/OCR 없이 바로 상호명/금액/일자 등 입력 가능
+    v2.5 통계 탭에서 사역팀별/개인별 지출현황을 별도 카드가 아닌 하나의 서브탭으로 전환
 -->
 <html lang="ko">
 <head>
@@ -99,7 +100,7 @@
 <body>
 
 <h1>MET2026 블레싱 삼척 영수증 정산</h1>
-<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v2.4</span></div>
+<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v2.5</span></div>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnRegister" onclick="switchTab('register')">등록하기</button>
@@ -228,18 +229,18 @@
   </div>
   <div class="card">
     <div class="total-bar">
-      <span>사역팀별 지출현황</span>
+      <div class="tabs" style="margin:0;flex:1;">
+        <button class="tab-btn active" id="statSubBtnTeam" onclick="switchStatSubTab('team')" style="padding:8px;font-size:13px;">사역팀별</button>
+        <button class="tab-btn" id="statSubBtnPerson" onclick="switchStatSubTab('person')" style="padding:8px;font-size:13px;">개인별</button>
+      </div>
     </div>
-    <div class="table-wrap">
+    <div id="statSubTeam" class="table-wrap">
       <table class="receipt-table">
         <thead><tr><th>사역팀명</th><th>금액</th><th>건수</th><th>비중</th></tr></thead>
         <tbody id="teamStatsBody"></tbody>
       </table>
     </div>
-  </div>
-  <div class="card">
-    <div class="total-bar"><span>개인별 지출현황</span></div>
-    <div class="table-wrap">
+    <div id="statSubPerson" class="table-wrap" style="display:none">
       <table class="receipt-table">
         <thead><tr><th>제출자</th><th>금액</th><th>건수</th><th>비중</th></tr></thead>
         <tbody id="personStatsBody"></tbody>
@@ -342,6 +343,13 @@ function deleteBudgetItem(rowId) {
   callApi('deleteBudget', { rowId: rowId }).then(loadBudgetList).catch(function(err) {
     alert('삭제 실패: ' + err.message);
   });
+}
+
+function switchStatSubTab(sub) {
+  document.getElementById('statSubTeam').style.display = (sub === 'team') ? 'block' : 'none';
+  document.getElementById('statSubPerson').style.display = (sub === 'person') ? 'block' : 'none';
+  document.getElementById('statSubBtnTeam').classList.toggle('active', sub === 'team');
+  document.getElementById('statSubBtnPerson').classList.toggle('active', sub === 'person');
 }
 
 function loadStats() {
