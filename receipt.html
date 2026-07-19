@@ -11,6 +11,8 @@
     v1.4 "[고객용]" 같은 대괄호 태그성 문구를 상호명으로 잘못 고르는 문제 수정
     v1.5 저장/조회 실패 시 서버 원문 응답을 에러 메시지에 포함해 원인 진단이 쉽도록 개선
     v1.6 새로 배포된 웹앱 URL로 교체
+    v1.7 전체내역 표에서 사용일자가 전체 타임스탬프(ISO)로 보이던 문제 수정 — "MM/DD" 형식으로만 표시
+    v1.8 "통계" 탭 추가 — 사역팀별/개인별 지출현황(금액, 건수, 비중 막대)
 -->
 <html lang="ko">
 <head>
@@ -88,11 +90,12 @@
 <body>
 
 <h1>MET2026 블레싱 삼척 영수증 정산</h1>
-<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v1.6</span></div>
+<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v1.8</span></div>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnRegister" onclick="switchTab('register')">등록하기</button>
   <button class="tab-btn" id="tabBtnAll" onclick="switchTab('all')">전체내역</button>
+  <button class="tab-btn" id="tabBtnStats" onclick="switchTab('stats')">통계</button>
 </div>
 
 <div id="panelRegister">
@@ -177,6 +180,30 @@
   </div>
 </div>
 
+<div id="panelStats" style="display:none">
+  <div class="card">
+    <div class="total-bar">
+      <span>사역팀별 지출현황</span>
+      <button class="refresh-btn" onclick="loadStats()">새로고침</button>
+    </div>
+    <div class="table-wrap">
+      <table class="receipt-table">
+        <thead><tr><th>사역팀명</th><th>금액</th><th>건수</th><th>비중</th></tr></thead>
+        <tbody id="teamStatsBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="total-bar"><span>개인별 지출현황</span></div>
+    <div class="table-wrap">
+      <table class="receipt-table">
+        <thead><tr><th>제출자</th><th>금액</th><th>건수</th><th>비중</th></tr></thead>
+        <tbody id="personStatsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <script>
 let currentBase64 = null;
 let currentMime = null;
@@ -207,12 +234,71 @@ function callApi(action, params) {
 }
 
 function switchTab(tab) {
-  const isReg = tab === 'register';
-  document.getElementById('panelRegister').style.display = isReg ? 'block' : 'none';
-  document.getElementById('panelAll').style.display = isReg ? 'none' : 'block';
-  document.getElementById('tabBtnRegister').classList.toggle('active', isReg);
-  document.getElementById('tabBtnAll').classList.toggle('active', !isReg);
-  if (!isReg) loadAllList();
+  const panels = { register: 'panelRegister', all: 'panelAll', stats: 'panelStats' };
+  const btns = { register: 'tabBtnRegister', all: 'tabBtnAll', stats: 'tabBtnStats' };
+  Object.keys(panels).forEach(function(k) {
+    document.getElementById(panels[k]).style.display = (k === tab) ? 'block' : 'none';
+    document.getElementById(btns[k]).classList.toggle('active', k === tab);
+  });
+  if (tab === 'all') loadAllList();
+  if (tab === 'stats') loadStats();
+}
+
+function loadStats() {
+  document.getElementById('teamStatsBody').innerHTML = '<tr><td colspan="4">불러오는 중...</td></tr>';
+  document.getElementById('personStatsBody').innerHTML = '<tr><td colspan="4">불러오는 중...</td></tr>';
+  callApi('getAllReceipts', {})
+    .then(function(items) {
+      allReceiptsCache = items;
+      const stats = computeStats(items);
+      renderStatsTable('teamStatsBody', stats.byTeam);
+      renderStatsTable('personStatsBody', stats.byPerson);
+    })
+    .catch(function(err) {
+      document.getElementById('teamStatsBody').innerHTML = '<tr><td colspan="4">조회 실패: ' + err.message + '</td></tr>';
+      document.getElementById('personStatsBody').innerHTML = '';
+    });
+}
+
+function computeStats(items) {
+  const byTeam = {}, byPerson = {};
+  items.forEach(function(it) {
+    const amt = Number(it.amount) || 0;
+    const team = it.team || '(미지정)';
+    byTeam[team] = byTeam[team] || { amount: 0, count: 0 };
+    byTeam[team].amount += amt;
+    byTeam[team].count++;
+    const person = it.submitter || '(미지정)';
+    byPerson[person] = byPerson[person] || { amount: 0, count: 0 };
+    byPerson[person].amount += amt;
+    byPerson[person].count++;
+  });
+  return { byTeam: byTeam, byPerson: byPerson };
+}
+
+function renderStatsTable(tbodyId, dataObj) {
+  const arr = Object.keys(dataObj).map(function(k) {
+    return { name: k, amount: dataObj[k].amount, count: dataObj[k].count };
+  });
+  arr.sort(function(a, b) { return b.amount - a.amount; });
+  const max = arr.length ? arr[0].amount : 0;
+  const tbody = document.getElementById(tbodyId);
+  tbody.innerHTML = '';
+  if (!arr.length) {
+    tbody.innerHTML = '<tr><td colspan="4">데이터가 없습니다.</td></tr>';
+    return;
+  }
+  arr.forEach(function(row) {
+    const pct = max ? Math.round(row.amount / max * 100) : 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + row.name + '</td>' +
+      '<td class="amt-col">' + row.amount.toLocaleString() + '원</td>' +
+      '<td>' + row.count + '건</td>' +
+      '<td style="min-width:80px"><div style="background:#e6e8eb;border-radius:4px;overflow:hidden;height:10px;">' +
+      '<div style="background:#2d6cdf;height:10px;width:' + pct + '%"></div></div></td>';
+    tbody.appendChild(tr);
+  });
 }
 
 function loadAllList() {
@@ -223,6 +309,21 @@ function loadAllList() {
       document.getElementById('allTableBody').innerHTML =
         '<tr><td colspan="8">조회 실패: ' + err.message + '</td></tr>';
     });
+}
+
+// 사용일자를 "MM/DD" 형태로만 표시 (시트가 날짜를 Date로 자동변환해도 대응)
+function formatDateMD(v) {
+  if (!v) return '';
+  const s = String(v);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[2] + '/' + m[3];
+  const d = new Date(v);
+  if (!isNaN(d.getTime())) {
+    // 시트가 저장한 UTC 자정 기준값을 한국시간(KST, UTC+9) 기준 날짜로 보정
+    const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+    return String(kst.getUTCMonth() + 1).padStart(2, '0') + '/' + String(kst.getUTCDate()).padStart(2, '0');
+  }
+  return s;
 }
 
 function renderAllList(items) {
@@ -237,7 +338,7 @@ function renderAllList(items) {
     total += Number(it.amount) || 0;
     const tr = document.createElement('tr');
     tr.innerHTML =
-      '<td>' + (it.usedDate || '') + '</td>' +
+      '<td>' + formatDateMD(it.usedDate) + '</td>' +
       '<td>' + (it.submitter || '') + '</td>' +
       '<td>' + (it.team || '') + '</td>' +
       '<td>' + (it.vendor || '') + '</td>' +
@@ -255,7 +356,7 @@ function exportAllExcel() {
   var headers = ['사용일자', '제출자', '사역팀명', '상호명', '금액', '구매내역', '이미지링크', '메모'];
   var rows = allReceiptsCache.map(function(it) {
     return {
-      '사용일자': it.usedDate || '',
+      '사용일자': formatDateMD(it.usedDate),
       '제출자': it.submitter || '',
       '사역팀명': it.team || '',
       '상호명': it.vendor || '',
