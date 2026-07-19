@@ -13,6 +13,8 @@
     v1.6 새로 배포된 웹앱 URL로 교체
     v1.7 전체내역 표에서 사용일자가 전체 타임스탬프(ISO)로 보이던 문제 수정 — "MM/DD" 형식으로만 표시
     v1.8 "통계" 탭 추가 — 사역팀별/개인별 지출현황(금액, 건수, 비중 막대)
+    v1.9 드라이브 이미지 링크(uc?id=)가 <img>에서 깨져 보이던 문제 수정
+         — thumbnail 형식(drive.google.com/thumbnail?id=...)으로 자동 변환
 -->
 <html lang="ko">
 <head>
@@ -90,7 +92,7 @@
 <body>
 
 <h1>MET2026 블레싱 삼척 영수증 정산</h1>
-<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v1.8</span></div>
+<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v1.9</span></div>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnRegister" onclick="switchTab('register')">등록하기</button>
@@ -344,7 +346,7 @@ function renderAllList(items) {
       '<td>' + (it.vendor || '') + '</td>' +
       '<td class="amt-col">' + Number(it.amount).toLocaleString() + '원</td>' +
       '<td>' + (it.purchaseDetail || '') + '</td>' +
-      '<td>' + (it.imageUrl ? '<img class="thumb" src="' + it.imageUrl + '">' : '') + '</td>' +
+      '<td>' + (it.imageUrl ? '<img class="thumb" src="' + toDriveThumb(it.imageUrl) + '">' : '') + '</td>' +
       '<td>' + (it.memo || '') + '</td>';
     body.appendChild(tr);
   });
@@ -610,6 +612,14 @@ function loadList() {
     .catch(function(err) { setStatus('목록 조회 실패: ' + err.message); });
 }
 
+// 구글 드라이브 uc?id=... 링크를 <img>에서 안정적으로 뜨는 썸네일 형식으로 변환
+function toDriveThumb(url) {
+  if (!url) return '';
+  const m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w400';
+  return url;
+}
+
 function renderList(items) {
   const listEl = document.getElementById('list');
   listEl.innerHTML = '';
@@ -619,11 +629,11 @@ function renderList(items) {
     const div = document.createElement('div');
     div.className = 'item';
     div.innerHTML =
-      '<img src="' + (it.imageUrl || '') + '">' +
+      '<img src="' + toDriveThumb(it.imageUrl) + '">' +
       '<div class="info"><div class="vendor">' + (it.vendor || '(상호명 없음)') +
       (it.team ? ' · ' + it.team : '') + '</div>' +
       '<div class="meta">' + (it.purchaseDetail || '') + '</div>' +
-      '<div class="meta">' + (it.usedDate || '') + (it.memo ? ' · ' + it.memo : '') + '</div></div>' +
+      '<div class="meta">' + formatDateMD(it.usedDate) + (it.memo ? ' · ' + it.memo : '') + '</div></div>' +
       '<div class="amt">' + Number(it.amount).toLocaleString() + '원</div>' +
       '<button class="del" onclick="deleteReceipt(\'' + it.rowId + '\')">삭제</button>';
     listEl.appendChild(div);
