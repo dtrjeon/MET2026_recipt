@@ -1,4 +1,14 @@
 <!DOCTYPE html>
+<!--
+  MET2026 영수증 경비정산 — v1.3 (2026-07-19)
+  변경 이력:
+    v1.0 CLOVA OCR + google.script.run 기반 초기 버전
+    v1.1 사역팀명 드롭다운(+직접입력), 구매내역 필드 추가, 전체내역 탭 + 엑셀저장
+    v1.2 GitHub Pages 배포용 fetch()/doPost 방식으로 전환, OCR.space로 교체,
+         전용 별도 스프레드시트 자동 생성
+    v1.3 사진 리사이즈/압축 후 OCR 전송, 상호명/금액 추정 로직 개선
+         (관리번호 오인식 방지, 콤마·마침표 구분 인식)
+-->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -75,7 +85,7 @@
 <body>
 
 <h1>MET2026 블레싱 삼척 영수증 정산</h1>
-<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요.</div>
+<div class="sub">영수증 사진을 찍으면 자동으로 인식해서 기록해 드려요. <span style="color:#bbb">v1.3</span></div>
 
 <div class="tabs">
   <button class="tab-btn active" id="tabBtnRegister" onclick="switchTab('register')">등록하기</button>
